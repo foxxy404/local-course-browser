@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1 class="text-2xl font-semibold mb-4">Admin</h1>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+      <div class="font-medium mb-1">Library scan</div>
+      <div class="text-sm text-zinc-400 mb-3">Run a rescan manually when you add/remove courses.</div>
+      <form method="post" action="/admin/scan">
+        <button class="px-3 py-2 rounded bg-zinc-200 text-zinc-900 hover:bg-white text-sm font-medium" type="submit">Scan now</button>
+      </form>
+    </div>
+
+    <div class="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+      <div class="font-medium mb-1">Udemy thumbnails (best-effort)</div>
+      <div class="text-sm text-zinc-400 mb-3">Tries to find thumbnails by searching Udemy using each course title.</div>
+      <form method="post" action="/admin/thumbnails">
+        <button class="px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-sm font-medium" type="submit">Fetch thumbnails</button>
+      </form>
+      <div class="text-xs text-zinc-500 mt-3">Note: Udemy may rate-limit/block. This is optional.</div>
+    </div>
+  </div>
+
+  {% if result %}
+    <div class="mt-6 p-4 rounded-lg bg-zinc-900 border border-zinc-800">
+      <div class="font-medium mb-2">Last action</div>
+      <pre class="text-xs text-zinc-300 whitespace-pre-wrap">{{ result | tojson(indent=2) }}</pre>
+    </div>
+  {% endif %}
+{% endblock %}

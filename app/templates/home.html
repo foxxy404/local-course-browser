@@ -1,6 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-  <h1 class="text-2xl font-semibold mb-4">Your courses</h1>
+  <div class="flex items-end justify-between gap-4 mb-4">
+    <h1 class="text-2xl font-semibold">Your courses</h1>
+    <form class="flex items-center gap-2" method="get" action="/">
+      <input name="q" value="{{ q }}" placeholder="Search courses" class="px-3 py-2 rounded bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-zinc-500" />
+      <button class="px-3 py-2 rounded bg-zinc-200 text-zinc-900 hover:bg-white text-sm font-medium" type="submit">Search</button>
+    </form>
+  </div>
 
   {% if not courses %}
     <div class="p-4 rounded-lg bg-zinc-900 border border-zinc-800">
@@ -12,7 +18,12 @@
   {% else %}
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {% for c in courses %}
-        <a href="/course/{{ c.id }}" class="block p-4 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition">
+        <a href="/course/{{ c.id }}" class="block p-4 rounded-lg bg-zinc-900 border border-zinc-800 hover:border-zinc-600 transition overflow-hidden">
+          {% if c.thumbnail_url %}
+            <div class="-mx-4 -mt-4 mb-3">
+              <img src="{{ c.thumbnail_url }}" class="w-full h-36 object-cover" loading="lazy" />
+            </div>
+          {% endif %}
           <div class="font-medium leading-tight">{{ c.title }}</div>
           <div class="text-xs text-zinc-500 mt-1">{{ c.path }}</div>
         </a>

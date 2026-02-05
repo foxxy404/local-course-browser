@@ -11,9 +11,11 @@ from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, select
 
 from .config import get_settings
-from .db import get_session, init_db
+from .db import get_session, init_db, engine
 from .models import Course, Lesson, Progress
 from .scan import scan_library
+from .admin import build_admin_router
+from .udemy_thumb import best_thumbnail_for_course_title
 
 
 app = FastAPI(title="Udemy-Local")
@@ -21,32 +23,68 @@ app = FastAPI(title="Udemy-Local")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
+SCAN_META: dict[str, Any] = {"has_scanned": False, "scan": None}
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
 
-
-def ensure_scanned(session: Session) -> dict[str, Any]:
+    # Initial scan at app launch.
     settings = get_settings()
-    stats = scan_library(session, settings.courses_dir)
-    return {"courses_dir": str(settings.courses_dir), "scan": stats}
+    from sqlmodel import Session as _Session
+
+    with _Session(bind=engine) as s:
+        stats = scan_library(s, settings.courses_dir)
+        SCAN_META["has_scanned"] = True
+        SCAN_META["scan"] = stats
+
+
+def session_engine():
+    return engine
+
+
+def meta() -> dict[str, Any]:
+    settings = get_settings()
+    return {
+        "courses_dir": str(settings.courses_dir),
+        "scan": SCAN_META.get("scan"),
+        "has_scanned": bool(SCAN_META.get("has_scanned")),
+    }
+
+
+def _set_scan_meta(stats):
+    SCAN_META["has_scanned"] = True
+    SCAN_META["scan"] = stats
+
+
+# Admin routes (manual scan, thumbnail fetch)
+app.include_router(
+    build_admin_router(
+        templates=templates, meta_func=meta, get_session_dep=get_session, set_scan_meta=_set_scan_meta
+    )
+)
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, session: Session = Depends(get_session)):
-    meta = ensure_scanned(session)
+def home(request: Request, q: str | None = None, session: Session = Depends(get_session)):
+    m = meta()
 
-    courses = session.exec(select(Course).order_by(Course.title)).all()
+    stmt = select(Course)
+    if q:
+        stmt = stmt.where(Course.title.contains(q))
+    courses = session.exec(stmt.order_by(Course.title)).all()
+
     return templates.TemplateResponse(
         request,
         "home.html",
-        {"courses": courses, **meta},
+        {"courses": courses, "q": q or "", **m},
     )
 
 
 @app.get("/course/{course_id}", response_class=HTMLResponse)
 def course_detail(course_id: int, request: Request, session: Session = Depends(get_session)):
-    meta = ensure_scanned(session)
+    m = meta()
 
     course = session.get(Course, course_id)
     if not course:
@@ -70,13 +108,13 @@ def course_detail(course_id: int, request: Request, session: Session = Depends(g
     return templates.TemplateResponse(
         request,
         "course.html",
-        {"course": course, "sections": dict(sections), **meta},
+        {"course": course, "sections": dict(sections), **m},
     )
 
 
 @app.get("/lesson/{lesson_id}", response_class=HTMLResponse)
 def lesson_player(lesson_id: int, request: Request, session: Session = Depends(get_session)):
-    meta = ensure_scanned(session)
+    m = meta()
 
     lesson = session.get(Lesson, lesson_id)
     if not lesson:
@@ -88,7 +126,7 @@ def lesson_player(lesson_id: int, request: Request, session: Session = Depends(g
     return templates.TemplateResponse(
         request,
         "lesson.html",
-        {"lesson": lesson, "course": course, "progress": progress, **meta},
+        {"lesson": lesson, "course": course, "progress": progress, **m},
     )
 
 

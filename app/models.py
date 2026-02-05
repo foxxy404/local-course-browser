@@ -13,6 +13,9 @@ class Course(SQLModel, table=True):
     path: str = Field(index=True, nullable=False)
     title: str = Field(index=True, nullable=False)
 
+    # Optional: remote thumbnail URL (e.g., scraped from Udemy)
+    thumbnail_url: Optional[str] = Field(default=None)
+
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 

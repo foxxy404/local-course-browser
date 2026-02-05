@@ -9,16 +9,30 @@
 <body class="bg-zinc-950 text-zinc-100">
   <div class="max-w-6xl mx-auto px-4 py-6">
     <div class="flex items-center justify-between mb-6">
-      <a class="text-xl font-semibold tracking-tight" href="/">Udemy-Local</a>
-      <div class="text-xs text-zinc-400">
+      <div class="flex items-center gap-4">
+        <a class="text-xl font-semibold tracking-tight" href="/">Udemy-Local</a>
+        <a class="text-sm text-zinc-400 hover:text-zinc-200" href="/admin">Admin</a>
+      </div>
+      <div class="text-xs text-zinc-400 text-right">
         <div>courses: <span class="text-zinc-200">{{ courses_dir }}</span></div>
+        <div>
+          {% if has_scanned %}
+            initial scan: <span class="text-zinc-200">done</span>
+          {% else %}
+            initial scan: <span class="text-amber-200">pending</span>
+          {% endif %}
+        </div>
       </div>
     </div>
 
     {% block content %}{% endblock %}
 
     <div class="mt-10 pt-6 border-t border-zinc-800 text-xs text-zinc-500">
-      scan: {{ scan.courses_seen }} courses / {{ scan.lessons_seen }} lessons
+      {% if scan %}
+        scan: {{ scan.courses_seen }} courses / {{ scan.lessons_seen }} lessons
+      {% else %}
+        scan: (not run yet)
+      {% endif %}
     </div>
   </div>
 </body>
