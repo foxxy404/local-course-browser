@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{{ title or "Udemy-Local" }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-950 text-zinc-100">
+  <div class="max-w-6xl mx-auto px-4 py-6">
+    <div class="flex items-center justify-between mb-6">
+      <a class="text-xl font-semibold tracking-tight" href="/">Udemy-Local</a>
+      <div class="text-xs text-zinc-400">
+        <div>courses: <span class="text-zinc-200">{{ courses_dir }}</span></div>
+      </div>
+    </div>
+
+    {% block content %}{% endblock %}
+
+    <div class="mt-10 pt-6 border-t border-zinc-800 text-xs text-zinc-500">
+      scan: {{ scan.courses_seen }} courses / {{ scan.lessons_seen }} lessons
+    </div>
+  </div>
+</body>
+</html>
