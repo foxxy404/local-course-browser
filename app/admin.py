@@ -1,25 +1,33 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlmodel import Session, select
 
 from .config import get_settings
 from .models import Course
-from .scan import scan_library
+from .scan import ScanStats, scan_library
 from .udemy_thumb import best_thumbnail_for_course_title
 
 
-router = APIRouter()
+def build_admin_router(
+    *,
+    templates: Any,
+    meta_func: Callable[[], dict[str, Any]],
+    get_session_dep: Callable[[], Session],
+    set_scan_meta: Callable[[ScanStats], None],
+) -> APIRouter:
+    """Admin UI routes.
 
+    - Manual library scan
+    - Optional best-effort thumbnail fetch (Udemy)
 
-@router.get("/admin", response_class=HTMLResponse)
-def admin_home(request: Request, session: Session = Depends(lambda: None)):
-    # NOTE: actual dependency injected in main when included (see include_router wrapper)
-    return request
+    Kept as a router factory so the main app can inject dependencies cleanly.
+    """
 
-
-def build_admin_router(templates, meta_func, get_session_dep, set_scan_meta):
     r = APIRouter()
 
     @r.get("/admin", response_class=HTMLResponse)

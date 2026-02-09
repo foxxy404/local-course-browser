@@ -1,21 +1,23 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from dataclasses import dataclass
+import logging
+import mimetypes
 from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel, Field
 from sqlmodel import Session, select
 
-from .config import get_settings
-from .db import get_session, init_db, engine
-from .models import Course, Lesson, Progress
-from .scan import scan_library
 from .admin import build_admin_router
-from .udemy_thumb import best_thumbnail_for_course_title
+from .config import get_settings
+from .db import engine, get_session, init_db
+from .models import Course, Lesson, Progress
+from .scan import ScanStats, scan_library
 
 
 app = FastAPI(title="Udemy-Local")
@@ -23,39 +25,47 @@ app = FastAPI(title="Udemy-Local")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
 
-SCAN_META: dict[str, Any] = {"has_scanned": False, "scan": None}
+log = logging.getLogger(__name__)
+
+
+@dataclass
+class ScanMeta:
+    has_scanned: bool = False
+    stats: ScanStats | None = None
+
+
+SCAN_META = ScanMeta()
 
 
 @app.on_event("startup")
-def on_startup():
+def on_startup() -> None:
     init_db()
 
     # Initial scan at app launch.
+    # If it fails, we don't want to crash the whole app; admin can rescan.
     settings = get_settings()
-    from sqlmodel import Session as _Session
+    try:
+        from sqlmodel import Session as _Session
 
-    with _Session(bind=engine) as s:
-        stats = scan_library(s, settings.courses_dir)
-        SCAN_META["has_scanned"] = True
-        SCAN_META["scan"] = stats
-
-
-def session_engine():
-    return engine
+        with _Session(bind=engine) as s:
+            stats = scan_library(s, settings.courses_dir)
+            _set_scan_meta(stats)
+    except Exception:
+        log.exception("initial library scan failed (courses_dir=%s)", settings.courses_dir)
 
 
 def meta() -> dict[str, Any]:
     settings = get_settings()
     return {
         "courses_dir": str(settings.courses_dir),
-        "scan": SCAN_META.get("scan"),
-        "has_scanned": bool(SCAN_META.get("has_scanned")),
+        "scan": SCAN_META.stats,
+        "has_scanned": SCAN_META.has_scanned,
     }
 
 
-def _set_scan_meta(stats):
-    SCAN_META["has_scanned"] = True
-    SCAN_META["scan"] = stats
+def _set_scan_meta(stats: ScanStats) -> None:
+    SCAN_META.has_scanned = True
+    SCAN_META.stats = stats
 
 
 # Admin routes (manual scan, thumbnail fetch)
@@ -68,18 +78,16 @@ app.include_router(
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, q: str | None = None, session: Session = Depends(get_session)):
+    """Course list page."""
     m = meta()
 
     stmt = select(Course)
     if q:
+        # Simple substring match for MVP; can upgrade to FTS later.
         stmt = stmt.where(Course.title.contains(q))
     courses = session.exec(stmt.order_by(Course.title)).all()
 
-    return templates.TemplateResponse(
-        request,
-        "home.html",
-        {"courses": courses, "q": q or "", **m},
-    )
+    return templates.TemplateResponse(request, "home.html", {"courses": courses, "q": q or "", **m})
 
 
 @app.get("/course/{course_id}", response_class=HTMLResponse)
@@ -132,6 +140,10 @@ def lesson_player(lesson_id: int, request: Request, session: Session = Depends(g
 
 @app.get("/video/{lesson_id}")
 def video_stream(lesson_id: int, session: Session = Depends(get_session)):
+    """Serves the underlying video file.
+
+    FileResponse supports HTTP Range requests in Starlette, so seeking works.
+    """
     lesson = session.get(Lesson, lesson_id)
     if not lesson:
         raise HTTPException(404, "Lesson not found")
@@ -140,18 +152,23 @@ def video_stream(lesson_id: int, session: Session = Depends(get_session)):
     if not p.exists() or not p.is_file():
         raise HTTPException(404, "Video file missing")
 
-    # FileResponse supports Range requests in Starlette; good for seeking.
-    return FileResponse(path=str(p), media_type="video/mp4", filename=p.name)
+    media_type, _ = mimetypes.guess_type(p.name)
+    return FileResponse(path=str(p), media_type=media_type or "application/octet-stream", filename=p.name)
+
+
+class ProgressIn(BaseModel):
+    position_seconds: float = Field(default=0.0, ge=0.0)
+    completed: bool = False
 
 
 @app.post("/api/progress/{lesson_id}")
-def upsert_progress(lesson_id: int, payload: dict, session: Session = Depends(get_session)):
+def upsert_progress(lesson_id: int, payload: ProgressIn, session: Session = Depends(get_session)):
     lesson = session.get(Lesson, lesson_id)
     if not lesson:
         raise HTTPException(404, "Lesson not found")
 
-    position = float(payload.get("position_seconds", 0.0) or 0.0)
-    completed = bool(payload.get("completed", False))
+    position = float(payload.position_seconds or 0.0)
+    completed = bool(payload.completed)
 
     prog = session.exec(select(Progress).where(Progress.lesson_id == lesson_id)).first()
     if not prog:

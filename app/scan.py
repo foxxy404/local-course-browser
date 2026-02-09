@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -8,14 +7,10 @@ from typing import Iterable
 from sqlmodel import Session, select
 
 from .models import Course, Lesson
+from .utils import natural_key
 
 
 VIDEO_EXTS = {".mp4", ".mkv", ".webm", ".mov", ".m4v"}
-
-
-def natural_key(s: str):
-    # Split into [text|int] chunks so 2 < 10.
-    return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
 
 
 @dataclass
